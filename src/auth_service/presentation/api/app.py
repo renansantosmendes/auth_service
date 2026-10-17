@@ -1,13 +1,16 @@
 """FastAPI application factory."""
 
 import logging
+import time
+from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
 from auth_service import __version__
 from auth_service.infrastructure.config import Settings, get_settings
+from auth_service.infrastructure.logging_config import configure_logging
 from auth_service.presentation.api.error_handlers import (
     register_error_handlers,
 )
@@ -19,6 +22,8 @@ from auth_service.presentation.api.routers import (
 )
 
 API_PREFIX = "/api/v1"
+
+logger = logging.getLogger(__name__)
 
 API_DESCRIPTION = """
 Generic authentication and password management service. Any application
@@ -124,7 +129,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     >>> uvicorn.run(create_app(), port=8000)
     """
     settings = settings or get_settings()
-    logging.basicConfig(level=logging.INFO)
+    configure_logging()
+    logger.info(
+        "Starting %s %s in the %s environment.",
+        settings.application_name,
+        __version__,
+        settings.environment,
+    )
+    logger.info(
+        "E-mail backend: %s. Reset page: %s. Reset link valid for %d minutes.",
+        settings.email_backend,
+        settings.password_reset_url,
+        settings.password_reset_ttl_minutes,
+    )
+    logger.info(
+        "CORS: %d allowed origin(s): %s.",
+        len(settings.cors_origins),
+        ", ".join(settings.cors_origins) or "none",
+    )
     app = FastAPI(
         title="Auth Service API",
         version=__version__,
@@ -154,6 +176,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["Authorization", "Content-Type"],
             expose_headers=["Retry-After"],
         )
+    @app.middleware("http")
+    async def log_requests(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        """Log the method, path, client, status and duration of a request.
+
+        The query string is left out because it may carry a token.
+
+        Parameters
+        ----------
+        request : Request
+            Incoming request.
+        call_next : Callable[[Request], Awaitable[Response]]
+            Passes the request on to the rest of the application.
+
+        Returns
+        -------
+        Response
+            Response produced by the application.
+        """
+        client_address = request.client.host if request.client else "unknown"
+        started_at = time.perf_counter()
+        logger.info(
+            "Request %s %s from %s.",
+            request.method,
+            request.url.path,
+            client_address,
+        )
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - started_at) * 1000
+        logger.info(
+            "Response %s %s: HTTP %d in %.1f ms.",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+
     register_error_handlers(app)
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(auth.router, prefix=API_PREFIX)

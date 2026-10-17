@@ -1,5 +1,7 @@
 """E-mail sender that delivers messages through the Resend API."""
 
+import logging
+
 import resend
 
 from auth_service.application.ports.email import (
@@ -7,6 +9,9 @@ from auth_service.application.ports.email import (
     EmailMessage,
     EmailSender,
 )
+from auth_service.infrastructure.logging_config import mask_email
+
+logger = logging.getLogger(__name__)
 
 
 class ResendEmailSender(EmailSender):
@@ -57,8 +62,15 @@ class ResendEmailSender(EmailSender):
             When the Resend API rejects or cannot receive the message.
         """
         resend.api_key = self._api_key
+        logger.info(
+            "Calling the Resend API: from %s to %s, subject %r, %d characters.",
+            self._sender,
+            mask_email(message.recipient),
+            message.subject,
+            len(message.body),
+        )
         try:
-            resend.Emails.send(
+            response = resend.Emails.send(
                 {
                     "from": self._sender,
                     "to": [message.recipient],
@@ -67,6 +79,16 @@ class ResendEmailSender(EmailSender):
                 }
             )
         except (resend.exceptions.ResendError, OSError) as error:
+            logger.error(
+                "Resend API call failed for %s: %s",
+                mask_email(message.recipient),
+                error,
+            )
             raise EmailDeliveryError(
                 f"Resend could not deliver the message: {error}"
             ) from error
+        logger.info(
+            "Resend API accepted the message to %s (email id %s).",
+            mask_email(message.recipient),
+            response.get("id", "unknown"),
+        )

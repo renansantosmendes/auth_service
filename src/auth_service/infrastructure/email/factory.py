@@ -1,5 +1,7 @@
 """Chooses the e-mail sender configured in the settings."""
 
+import logging
+
 from auth_service.application.ports.email import EmailSender
 from auth_service.infrastructure.config import Settings
 from auth_service.infrastructure.email.logging_email_sender import (
@@ -11,6 +13,8 @@ from auth_service.infrastructure.email.resend_email_sender import (
 from auth_service.infrastructure.email.smtp_email_sender import (
     SmtpEmailSender,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def build_email_sender(settings: Settings) -> EmailSender:
@@ -32,23 +36,44 @@ def build_email_sender(settings: Settings) -> EmailSender:
         When Resend is selected without an API key or sender address, or
         SMTP is selected without host or sender address.
     """
+    logger.info(
+        "E-mail backend from settings: %s.",
+        settings.email_backend,
+    )
     if settings.email_backend == "console":
         return LoggingEmailSender()
     if settings.email_backend == "resend":
         if not settings.resend_api_key or not settings.resend_from:
+            logger.error(
+                "EMAIL_BACKEND is 'resend' but RESEND_API_KEY or RESEND_FROM "
+                "is missing."
+            )
             raise ValueError(
                 "RESEND_API_KEY and RESEND_FROM are required when "
                 "EMAIL_BACKEND is 'resend'."
             )
+        logger.info(
+            "Resend sender configured with sender %s.",
+            settings.resend_from,
+        )
         return ResendEmailSender(
             api_key=settings.resend_api_key.get_secret_value(),
             sender=settings.resend_from,
         )
     if not settings.smtp_host or not settings.smtp_sender:
+        logger.error(
+            "EMAIL_BACKEND is 'smtp' but SMTP_HOST or SMTP_SENDER is missing."
+        )
         raise ValueError(
             "SMTP_HOST and SMTP_SENDER are required when EMAIL_BACKEND "
             "is 'smtp'."
         )
+    logger.info(
+        "SMTP sender configured for %s:%s with sender %s.",
+        settings.smtp_host,
+        settings.smtp_port,
+        settings.smtp_sender,
+    )
     return SmtpEmailSender(
         host=settings.smtp_host,
         port=settings.smtp_port,
