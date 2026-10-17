@@ -18,7 +18,7 @@ roles, courses) belong here.
 - Clean Architecture with SOLID; dependencies point inwards only:
   `domain` (entities, errors, rules; no I/O) <- `application` (use
   cases, ports, policies, DTOs) <- `infrastructure` (PostgreSQL,
-  Argon2, JWT, SMTP, settings) and `presentation/api` (FastAPI).
+  Argon2, JWT, Resend, SMTP, settings) and `presentation/api` (FastAPI).
 - Use cases depend on ports from `application/ports`, never on
   adapters. Wire implementations only in
   `presentation/api/dependencies.py`.

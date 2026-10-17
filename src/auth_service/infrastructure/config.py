@@ -41,7 +41,9 @@ class Settings(BaseSettings):
     login_max_failed_attempts: int = Field(default=5, gt=0)
     login_throttle_window_minutes: int = Field(default=15, gt=0)
     cors_allowed_origins: str = ""
-    email_backend: Literal["console", "smtp"] = "console"
+    email_backend: Literal["console", "smtp", "resend"] = "console"
+    resend_api_key: SecretStr | None = None
+    resend_from: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None

@@ -68,7 +68,7 @@ Clean Architecture; dependencies point inwards only.
 src/auth_service/
 ├── domain/           Entities, business errors, password policy (no I/O)
 ├── application/      Use cases, ports (interfaces), policies, DTOs
-├── infrastructure/   Adapters: PostgreSQL, Argon2, JWT (RS256), SMTP, settings
+├── infrastructure/   Adapters: PostgreSQL, Argon2, JWT (RS256), Resend, SMTP, settings
 ├── presentation/api  FastAPI app, routers, schemas, error handlers,
 │                     dependency wiring (composition root)
 └── cli/              Administrative commands
@@ -93,6 +93,9 @@ The service has no public sign-up endpoint: administrators create accounts
 with `create-user`. Without `--password`, the user defines the password
 through "forgot my password". With `EMAIL_BACKEND=console`, the recovery
 e-mail (including the link) is printed to the log instead of being sent.
+With `EMAIL_BACKEND=resend` the message is sent through the Resend API
+(`RESEND_API_KEY` and a `RESEND_FROM` address on a domain verified in
+Resend); with `EMAIL_BACKEND=smtp` it goes through an SMTP server.
 
 Access to applications is granted per account. An application must exist
 in `identity.applications` (`finbrain` is seeded), and then:
@@ -123,8 +126,9 @@ every push to `main` and every pull request.
 1. Import the repository in Vercel (framework preset: *Other*).
 2. Set the environment variables from `.env.example`. Required:
    `AUTH_DATABASE_URL` (Neon pooled host), `AUTH_JWT_PRIVATE_KEY`,
-   `PASSWORD_RESET_URL`, `CORS_ALLOWED_ORIGINS`, `EMAIL_BACKEND=smtp` and
-   the `SMTP_*` values. Never set `NEON_DATABASE_URL` there.
+   `PASSWORD_RESET_URL`, `CORS_ALLOWED_ORIGINS`, `EMAIL_BACKEND=resend` with
+   `RESEND_API_KEY` and `RESEND_FROM` (or `EMAIL_BACKEND=smtp` with the
+   `SMTP_*` values). Never set `NEON_DATABASE_URL` there.
 3. Deploy. `vercel.json` routes every path to `api/index.py`.
 4. Point each client application at
    `https://<auth-service-host>/.well-known/jwks.json`.
