@@ -404,3 +404,92 @@ class AuditLogRepository(ABC):
         int
             Number of matching events.
         """
+
+
+class ApplicationAccessRepository(ABC):
+    """Reads and changes which users may sign in to which applications."""
+
+    @abstractmethod
+    def application_is_active(
+        self,
+        application_code: str,
+    ) -> bool:
+        """Tell whether an application exists in the catalog and is active.
+
+        Parameters
+        ----------
+        application_code : str
+            Stable identifier of the application, for example ``finbrain``.
+
+        Returns
+        -------
+        bool
+            ``True`` when the application can be granted and used.
+        """
+
+    @abstractmethod
+    def has_active_access(
+        self,
+        user_id: UUID,
+        application_code: str,
+    ) -> bool:
+        """Tell whether a user currently has access to an application.
+
+        Parameters
+        ----------
+        user_id : UUID
+            Identifier of the user.
+        application_code : str
+            Stable identifier of the application.
+
+        Returns
+        -------
+        bool
+            ``True`` when the grant exists and has not been revoked.
+        """
+
+    @abstractmethod
+    def grant(
+        self,
+        user_id: UUID,
+        application_code: str,
+        moment: datetime,
+    ) -> None:
+        """Give a user access to an application, reactivating a revoked grant.
+
+        Parameters
+        ----------
+        user_id : UUID
+            Identifier of the user.
+        application_code : str
+            Stable identifier of the application.
+        moment : datetime
+            Moment of the change.
+
+        Returns
+        -------
+        None
+        """
+
+    @abstractmethod
+    def revoke(
+        self,
+        user_id: UUID,
+        application_code: str,
+        moment: datetime,
+    ) -> None:
+        """Remove a user's access to an application, keeping the history.
+
+        Parameters
+        ----------
+        user_id : UUID
+            Identifier of the user.
+        application_code : str
+            Stable identifier of the application.
+        moment : datetime
+            Moment of the change.
+
+        Returns
+        -------
+        None
+        """

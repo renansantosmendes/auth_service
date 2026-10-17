@@ -13,6 +13,7 @@ from auth_service.application.ports.email import (
     EmailSender,
 )
 from auth_service.application.ports.repositories import (
+    ApplicationAccessRepository,
     AuditEvent,
     AuditLogRepository,
     PasswordResetTokenRepository,
@@ -741,6 +742,98 @@ class InMemoryAuditLogRepository(AuditLogRepository):
         )
 
 
+class InMemoryApplicationAccessRepository(ApplicationAccessRepository):
+    """Application catalog and access grants kept in memory."""
+
+    def __init__(
+        self,
+        active_applications: tuple[str, ...] = ("finbrain",),
+    ) -> None:
+        """Create the repository with the given active applications.
+
+        Parameters
+        ----------
+        active_applications : tuple[str, ...]
+            Codes of the applications in the catalog.
+
+        Returns
+        -------
+        None
+        """
+        self.catalog = set(active_applications)
+        self.grants: dict[tuple[UUID, str], datetime | None] = {}
+
+    def application_is_active(self, application_code: str) -> bool:
+        """Tell whether the application is in the catalog.
+
+        Parameters
+        ----------
+        application_code : str
+            Application code.
+
+        Returns
+        -------
+        bool
+            Whether the application is active.
+        """
+        return application_code in self.catalog
+
+    def has_active_access(self, user_id: UUID, application_code: str) -> bool:
+        """Tell whether a grant exists and was not revoked.
+
+        Parameters
+        ----------
+        user_id : UUID
+            Identifier of the user.
+        application_code : str
+            Application code.
+
+        Returns
+        -------
+        bool
+            Whether the user can use the application.
+        """
+        key = (user_id, application_code)
+        return key in self.grants and self.grants[key] is None
+
+    def grant(self, user_id: UUID, application_code: str, moment: datetime) -> None:
+        """Store a grant, reactivating a revoked one.
+
+        Parameters
+        ----------
+        user_id : UUID
+            Identifier of the user.
+        application_code : str
+            Application code.
+        moment : datetime
+            Moment of the grant.
+
+        Returns
+        -------
+        None
+        """
+        self.grants[(user_id, application_code)] = None
+
+    def revoke(self, user_id: UUID, application_code: str, moment: datetime) -> None:
+        """Mark an active grant as revoked.
+
+        Parameters
+        ----------
+        user_id : UUID
+            Identifier of the user.
+        application_code : str
+            Application code.
+        moment : datetime
+            Moment of the revocation.
+
+        Returns
+        -------
+        None
+        """
+        if self.has_active_access(user_id, application_code):
+            self.grants[(user_id, application_code)] = moment
+
+
 class InMemoryUnitOfWork(UnitOfWork):
     """Unit of work over in-memory repositories that counts commits."""
 
@@ -763,6 +856,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self.sessions = InMemorySessionRepository(clock)
         self.password_reset_tokens = InMemoryPasswordResetTokenRepository()
         self.audit_log = InMemoryAuditLogRepository(clock)
+        self.application_access = InMemoryApplicationAccessRepository()
         self.commits = 0
 
     def __enter__(self) -> Self:

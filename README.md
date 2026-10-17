@@ -17,7 +17,7 @@ Interactive documentation, once the service is running:
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/v1/health` | - | Liveness check |
-| POST | `/api/v1/auth/login` | - | Sign in, returns access and refresh tokens |
+| POST | `/api/v1/auth/login` | - | Sign in, returns access and refresh tokens. With `application`, the account must have access to it (`403` otherwise) |
 | POST | `/api/v1/auth/refresh` | - | Rotate the refresh token, new access token |
 | POST | `/api/v1/auth/logout` | Bearer | End the current session |
 | GET | `/api/v1/auth/me` | Bearer | The authenticated user (also checks the session is still open) |
@@ -93,6 +93,19 @@ The service has no public sign-up endpoint: administrators create accounts
 with `create-user`. Without `--password`, the user defines the password
 through "forgot my password". With `EMAIL_BACKEND=console`, the recovery
 e-mail (including the link) is printed to the log instead of being sent.
+
+Access to applications is granted per account. An application must exist
+in `identity.applications` (`finbrain` is seeded), and then:
+
+```bash
+uv run --no-project python manage.py grant-access ana@example.com finbrain
+uv run --no-project python manage.py grant-access ana@example.com finbrain --revoke
+```
+
+A client that sends `"application": "finbrain"` in the sign-in body gets a
+token only when the account has active access to it; a revoked grant keeps
+its row, so the history stays in `identity.user_applications`. Clients that
+do not send `application` keep the previous behaviour.
 
 ## Quality checks
 

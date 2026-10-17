@@ -150,3 +150,25 @@ class IncorrectCurrentPasswordError(DomainError):
 
     code = "incorrect_current_password"
     message = "The current password is incorrect."
+
+
+class ApplicationAccessDeniedError(DomainError):
+    """The account exists and the password is right, but it has no active
+    access to the application it tried to sign in to."""
+
+    code = "application_access_denied"
+    message = "This account does not have access to the application."
+
+
+class ApplicationNotFoundError(DomainError):
+    """The application code is not in the catalog, or it is inactive."""
+
+    code = "application_not_found"
+    message = "The application is not registered or is inactive."
+
+
+class AccountNotFoundError(DomainError):
+    """No account uses the e-mail address."""
+
+    code = "account_not_found"
+    message = "No account uses this e-mail address."

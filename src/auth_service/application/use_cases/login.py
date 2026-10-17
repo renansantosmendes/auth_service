@@ -16,6 +16,7 @@ from auth_service.application.services.session_token_issuer import (
 )
 from auth_service.domain.entities import User
 from auth_service.domain.exceptions import (
+    ApplicationAccessDeniedError,
     InvalidCredentialsError,
     TooManyLoginAttemptsError,
 )
@@ -63,6 +64,7 @@ class LoginUseCase:
         password: str,
         keep_signed_in: bool,
         context: RequestContext,
+        application: str | None = None,
     ) -> LoginResult:
         """Sign the user in.
 
@@ -80,6 +82,9 @@ class LoginUseCase:
             Whether the session should use the long lifetime.
         context : RequestContext
             Information about the client.
+        application : str | None
+            Application the user is signing in to. When given, the account
+            must have an active grant to it.
 
         Returns
         -------
@@ -93,6 +98,9 @@ class LoginUseCase:
             no password, or the password is wrong.
         TooManyLoginAttemptsError
             When the account is temporarily blocked.
+        ApplicationAccessDeniedError
+            When the password is right but the account has no active access
+            to the requested application.
 
         Example
         -------
@@ -124,6 +132,22 @@ class LoginUseCase:
                 )
                 uow.commit()
                 raise InvalidCredentialsError()
+            if (
+                application is not None
+                and not uow.application_access.has_active_access(user.id, application)
+            ):
+                uow.audit_log.record(
+                    AuditEvent(
+                        action=audit_actions.LOGIN_DENIED,
+                        actor_user_id=user.id,
+                        entity_type=audit_actions.USER_ENTITY,
+                        entity_id=user.id,
+                        details={"application": application},
+                        ip_address=context.ip_address,
+                    )
+                )
+                uow.commit()
+                raise ApplicationAccessDeniedError()
             if self._password_hasher.needs_rehash(user.password_hash):
                 uow.users.update_password_hash(
                     user.id,
@@ -144,7 +168,10 @@ class LoginUseCase:
                     actor_user_id=user.id,
                     entity_type=audit_actions.SESSION_ENTITY,
                     entity_id=tokens.session_id,
-                    details={"keep_signed_in": keep_signed_in},
+                    details={
+                        "keep_signed_in": keep_signed_in,
+                        "application": application,
+                    },
                     ip_address=context.ip_address,
                 )
             )

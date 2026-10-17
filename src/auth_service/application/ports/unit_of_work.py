@@ -5,6 +5,7 @@ from types import TracebackType
 from typing import Self
 
 from auth_service.application.ports.repositories import (
+    ApplicationAccessRepository,
     AuditLogRepository,
     PasswordResetTokenRepository,
     SessionRepository,
@@ -28,6 +29,8 @@ class UnitOfWork(ABC):
         Access to password reset tokens.
     audit_log : AuditLogRepository
         Access to the audit trail.
+    application_access : ApplicationAccessRepository
+        Access to the applications each user may use.
 
     Example
     -------
@@ -40,6 +43,7 @@ class UnitOfWork(ABC):
     sessions: SessionRepository
     password_reset_tokens: PasswordResetTokenRepository
     audit_log: AuditLogRepository
+    application_access: ApplicationAccessRepository
 
     @abstractmethod
     def __enter__(self) -> Self:

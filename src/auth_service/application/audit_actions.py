@@ -2,6 +2,9 @@
 
 LOGIN_SUCCEEDED = "auth.login"
 LOGIN_FAILED = "auth.login_failed"
+LOGIN_DENIED = "auth.login_denied"
+APPLICATION_ACCESS_GRANTED = "auth.application_access_granted"
+APPLICATION_ACCESS_REVOKED = "auth.application_access_revoked"
 LOGOUT = "auth.logout"
 PASSWORD_RESET_REQUESTED = "auth.password_reset_requested"
 PASSWORD_RESET_COMPLETED = "auth.password_reset"

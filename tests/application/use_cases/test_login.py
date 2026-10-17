@@ -12,6 +12,7 @@ from auth_service.application.services.session_token_issuer import (
 )
 from auth_service.application.use_cases.login import LoginUseCase
 from auth_service.domain.exceptions import (
+    ApplicationAccessDeniedError,
     InvalidCredentialsError,
     TooManyLoginAttemptsError,
 )
@@ -257,3 +258,124 @@ def test_outdated_hash_is_upgraded_on_login(
         unit_of_work.users.get_by_id(user.id).password_hash
         == f"argon2-new:{VALID_PASSWORD}"
     )
+
+
+def test_login_to_an_application_requires_an_active_grant(
+    use_case: LoginUseCase,
+    unit_of_work: InMemoryUnitOfWork,
+) -> None:
+    """A user with a grant to the application signs in to it.
+
+    Parameters
+    ----------
+    use_case : LoginUseCase
+        Use case under test.
+    unit_of_work : InMemoryUnitOfWork
+        In-memory unit of work.
+
+    Returns
+    -------
+    None
+    """
+    user = unit_of_work.users.add(make_user())
+    unit_of_work.application_access.grant(user.id, "finbrain", None)
+    result = use_case.execute(
+        email=TEST_EMAIL,
+        password=VALID_PASSWORD,
+        keep_signed_in=False,
+        context=CONTEXT,
+        application="finbrain",
+    )
+    assert result.user.id == user.id
+    assert unit_of_work.audit_log.actions == [audit_actions.LOGIN_SUCCEEDED]
+
+
+def test_login_without_a_grant_is_denied_even_with_the_right_password(
+    use_case: LoginUseCase,
+    unit_of_work: InMemoryUnitOfWork,
+) -> None:
+    """The password is checked first, then the grant; the denial is audited
+    and does not count as a failed password.
+
+    Parameters
+    ----------
+    use_case : LoginUseCase
+        Use case under test.
+    unit_of_work : InMemoryUnitOfWork
+        In-memory unit of work.
+
+    Returns
+    -------
+    None
+    """
+    unit_of_work.users.add(make_user())
+    with pytest.raises(ApplicationAccessDeniedError):
+        use_case.execute(
+            email=TEST_EMAIL,
+            password=VALID_PASSWORD,
+            keep_signed_in=False,
+            context=CONTEXT,
+            application="finbrain",
+        )
+    assert unit_of_work.audit_log.actions == [audit_actions.LOGIN_DENIED]
+    assert unit_of_work.sessions.sessions == {}
+
+
+def test_revoked_grant_denies_the_application(
+    use_case: LoginUseCase,
+    unit_of_work: InMemoryUnitOfWork,
+    clock: FakeClock,
+) -> None:
+    """A revoked grant no longer opens the application.
+
+    Parameters
+    ----------
+    use_case : LoginUseCase
+        Use case under test.
+    unit_of_work : InMemoryUnitOfWork
+        In-memory unit of work.
+    clock : FakeClock
+        Frozen clock.
+
+    Returns
+    -------
+    None
+    """
+    user = unit_of_work.users.add(make_user())
+    unit_of_work.application_access.grant(user.id, "finbrain", clock.now())
+    unit_of_work.application_access.revoke(user.id, "finbrain", clock.now())
+    with pytest.raises(ApplicationAccessDeniedError):
+        use_case.execute(
+            email=TEST_EMAIL,
+            password=VALID_PASSWORD,
+            keep_signed_in=False,
+            context=CONTEXT,
+            application="finbrain",
+        )
+
+
+def test_login_without_an_application_keeps_the_previous_behaviour(
+    use_case: LoginUseCase,
+    unit_of_work: InMemoryUnitOfWork,
+) -> None:
+    """Without an application, any active account signs in as before.
+
+    Parameters
+    ----------
+    use_case : LoginUseCase
+        Use case under test.
+    unit_of_work : InMemoryUnitOfWork
+        In-memory unit of work.
+
+    Returns
+    -------
+    None
+    """
+    unit_of_work.users.add(make_user())
+    result = use_case.execute(
+        email=TEST_EMAIL,
+        password=VALID_PASSWORD,
+        keep_signed_in=False,
+        context=CONTEXT,
+    )
+    assert result.user.email == TEST_EMAIL

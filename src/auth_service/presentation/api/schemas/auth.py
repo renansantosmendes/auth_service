@@ -42,6 +42,17 @@ class LoginRequest(BaseModel):
             "`REFRESH_TOKEN_TTL_HOURS` (default 12 hours)."
         ),
     )
+    application: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        pattern="^[a-z0-9][a-z0-9_-]*$",
+        description=(
+            "Application the user is signing in to, for example `finbrain`. "
+            "When given, the account must have active access to it; otherwise "
+            "the answer is `403` (`application_access_denied`)."
+        ),
+    )
 
 
 class RefreshRequest(BaseModel):

@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from auth_service.domain.exceptions import (
+    ApplicationAccessDeniedError,
     DomainError,
     EmailAlreadyRegisteredError,
     IncorrectCurrentPasswordError,
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidCredentialsError: status.HTTP_401_UNAUTHORIZED,
+    ApplicationAccessDeniedError: status.HTTP_403_FORBIDDEN,
     InvalidAccessTokenError: status.HTTP_401_UNAUTHORIZED,
     InvalidRefreshTokenError: status.HTTP_401_UNAUTHORIZED,
     TooManyLoginAttemptsError: status.HTTP_429_TOO_MANY_REQUESTS,

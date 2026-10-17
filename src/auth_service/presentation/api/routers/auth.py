@@ -65,6 +65,11 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
             "E-mail or password is incorrect, or the account cannot sign "
             "in with a password (`invalid_credentials`)."
         ),
+        status.HTTP_403_FORBIDDEN: error_response_doc(
+            "The e-mail and password are correct, but the account has no "
+            "active access to the requested application "
+            "(`application_access_denied`)."
+        ),
         422: VALIDATION_RESPONSE,
         status.HTTP_429_TOO_MANY_REQUESTS: error_response_doc(
             "Too many failed attempts for this account "
@@ -99,6 +104,7 @@ def login(
         password=payload.password,
         keep_signed_in=payload.keep_signed_in,
         context=context,
+        application=payload.application,
     )
     tokens = TokenResponse.from_session_tokens(
         result.tokens,

@@ -426,3 +426,92 @@ def test_jwks_lets_clients_verify_access_tokens(harness: ApiHarness) -> None:
         issuer="auth-service",
     )
     assert claims["email"] == TEST_EMAIL
+
+
+def login_to_application(
+    harness: ApiHarness,
+    application: str,
+) -> dict:
+    """Call the sign-in endpoint for a given application.
+
+    Parameters
+    ----------
+    harness : ApiHarness
+        Test harness.
+    application : str
+        Application code sent in the request body.
+
+    Returns
+    -------
+    dict
+        JSON body of the response, including ``status_code``.
+    """
+    response = harness.client.post(
+        f"{API}/auth/login",
+        json={
+            "email": TEST_EMAIL,
+            "password": VALID_PASSWORD,
+            "keep_signed_in": False,
+            "application": application,
+        },
+        headers={"X-Forwarded-For": "203.0.113.7, 10.0.0.1"},
+    )
+    return {"status_code": response.status_code, **response.json()}
+
+
+def test_login_to_an_application_without_access_is_forbidden(
+    harness: ApiHarness,
+) -> None:
+    """A right password is not enough when the account lacks the grant.
+
+    Parameters
+    ----------
+    harness : ApiHarness
+        Test harness.
+
+    Returns
+    -------
+    None
+    """
+    body = login_to_application(harness, "finbrain")
+    assert body["status_code"] == 403
+    assert body["code"] == "application_access_denied"
+
+
+def test_login_to_an_application_with_access_returns_tokens(
+    harness: ApiHarness,
+) -> None:
+    """The same request succeeds once the grant exists.
+
+    Parameters
+    ----------
+    harness : ApiHarness
+        Test harness.
+
+    Returns
+    -------
+    None
+    """
+    user = harness.unit_of_work.users.get_by_email(TEST_EMAIL)
+    harness.unit_of_work.application_access.grant(user.id, "finbrain", None)
+    body = login_to_application(harness, "finbrain")
+    assert body["status_code"] == 200
+    assert body["access_token"]
+
+
+def test_application_code_must_be_a_simple_identifier(
+    harness: ApiHarness,
+) -> None:
+    """Application codes are lowercase identifiers, checked before the use case.
+
+    Parameters
+    ----------
+    harness : ApiHarness
+        Test harness.
+
+    Returns
+    -------
+    None
+    """
+    body = login_to_application(harness, "Fin Brain!")
+    assert body["status_code"] == 422

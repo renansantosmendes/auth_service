@@ -5,6 +5,7 @@ Usage::
     uv run --no-project python manage.py generate-signing-key
     uv run --no-project python manage.py apply-schema [--rotate]
     uv run --no-project python manage.py create-user EMAIL "FULL NAME" [--password]
+    uv run --no-project python manage.py grant-access EMAIL APPLICATION [--revoke]
 """
 
 import importlib
@@ -16,6 +17,7 @@ COMMAND_MODULES = {
     "generate-signing-key": "auth_service.cli.generate_signing_key",
     "apply-schema": "auth_service.cli.apply_schema",
     "create-user": "auth_service.cli.create_user",
+    "grant-access": "auth_service.cli.grant_access",
 }
 
 

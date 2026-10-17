@@ -10,6 +10,9 @@ from auth_service.application.ports.unit_of_work import UnitOfWork
 from auth_service.infrastructure.database import (
     password_reset_token_repository,
 )
+from auth_service.infrastructure.database.application_access_repository import (
+    PostgresApplicationAccessRepository,
+)
 from auth_service.infrastructure.database.audit_log_repository import (
     PostgresAuditLogRepository,
 )
@@ -72,6 +75,9 @@ class PostgresUnitOfWork(UnitOfWork):
             )
         )
         self.audit_log = PostgresAuditLogRepository(self._connection)
+        self.application_access = PostgresApplicationAccessRepository(
+            self._connection
+        )
         return self
 
     def __exit__(
