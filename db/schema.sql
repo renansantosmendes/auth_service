@@ -75,3 +75,26 @@ CREATE TABLE IF NOT EXISTS identity.audit_log (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_log_entity_idx ON identity.audit_log (entity_type, entity_id, action, created_at DESC);
+
+-- Applications that can use the accounts (catalog, maintained by the owner).
+CREATE TABLE IF NOT EXISTS identity.applications (
+  code       text PRIMARY KEY,               -- stable identifier, e.g. "finbrain"
+  name       text NOT NULL,
+  is_active  boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO identity.applications (code, name)
+VALUES ('finbrain', 'FinBrain')
+ON CONFLICT (code) DO NOTHING;
+
+-- Which user may sign in to which application. Revoked grants keep their row
+-- so the history stays visible; access requires revoked_at IS NULL.
+CREATE TABLE IF NOT EXISTS identity.user_applications (
+  user_id           uuid NOT NULL REFERENCES identity.users(id) ON DELETE CASCADE,
+  application_code  text NOT NULL REFERENCES identity.applications(code) ON DELETE CASCADE,
+  granted_at        timestamptz NOT NULL DEFAULT now(),
+  revoked_at        timestamptz,
+  PRIMARY KEY (user_id, application_code)
+);
+CREATE INDEX IF NOT EXISTS user_applications_app_idx ON identity.user_applications (application_code);
