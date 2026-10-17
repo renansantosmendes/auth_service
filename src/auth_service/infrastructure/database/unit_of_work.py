@@ -1,5 +1,6 @@
 """Unit of work backed by a PostgreSQL transaction."""
 
+import logging
 from types import TracebackType
 from typing import Self
 
@@ -22,6 +23,8 @@ from auth_service.infrastructure.database.session_repository import (
 from auth_service.infrastructure.database.user_repository import (
     PostgresUserRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PostgresUnitOfWork(UnitOfWork):
@@ -62,11 +65,13 @@ class PostgresUnitOfWork(UnitOfWork):
         Self
             The unit of work, with repositories ready to use.
         """
+        logger.info("Opening a database connection.")
         self._connection = psycopg.connect(
             self._database_url,
             row_factory=dict_row,
             connect_timeout=self._connect_timeout_seconds,
         )
+        logger.info("Database connection open; transaction started.")
         self.users = PostgresUserRepository(self._connection)
         self.sessions = PostgresSessionRepository(self._connection)
         self.password_reset_tokens = (
@@ -105,9 +110,11 @@ class PostgresUnitOfWork(UnitOfWork):
             return
         try:
             self._connection.rollback()
+            logger.info("Transaction rolled back (uncommitted changes discarded).")
         finally:
             self._connection.close()
             self._connection = None
+            logger.info("Database connection closed.")
 
     def commit(self) -> None:
         """Commit the current transaction.
@@ -117,3 +124,4 @@ class PostgresUnitOfWork(UnitOfWork):
         None
         """
         self._connection.commit()
+        logger.info("Transaction committed.")

@@ -1,5 +1,6 @@
 """Endpoints that recover and change passwords."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
@@ -17,6 +18,7 @@ from auth_service.application.use_cases.request_password_reset import (
 from auth_service.application.use_cases.reset_password import (
     ResetPasswordUseCase,
 )
+from auth_service.infrastructure.logging_config import mask_email
 from auth_service.presentation.api.dependencies import (
     get_change_password_use_case,
     get_current_principal,
@@ -48,6 +50,7 @@ WEAK_PASSWORD_DESCRIPTION = (
     "password equals the current one."
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/password", tags=["Password management"])
 
 
@@ -97,7 +100,13 @@ def forgot_password(
     MessageResponse
         Neutral confirmation.
     """
+    logger.info(
+        "Forgot-password request for %s from %s.",
+        mask_email(payload.email),
+        context.ip_address,
+    )
     use_case.execute(payload.email, context)
+    logger.info("Forgot-password request accepted; answering HTTP 202.")
     return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
 
 

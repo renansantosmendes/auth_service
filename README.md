@@ -110,6 +110,23 @@ token only when the account has active access to it; a revoked grant keeps
 its row, so the history stays in `identity.user_applications`. Clients that
 do not send `application` keep the previous behaviour.
 
+## Logs
+
+Every request writes two lines to standard error (Vercel shows them in the
+function logs): `Request <method> <path> from <client>` and `Response
+<method> <path>: HTTP <status> in <ms>`. The query string is never logged.
+
+The forgot-password flow logs each step with its result, for example
+`Step 1/5 result: no account uses this e-mail`, `Step 2/5` (token created),
+`Step 3/5` (committed), `Step 4/5` (e-mail built), `Step 5/5` (handed to the
+sender). The sender logs the call to Resend or to the SMTP server, and the
+message id or the error. Failed deliveries are logged with the traceback.
+
+Logs never contain passwords, tokens, keys or the full e-mail address
+(`mask_email` keeps only the first letter of the local part). With
+`EMAIL_BACKEND=console` the message body is logged, including the reset link,
+so use that backend only in development.
+
 ## Quality checks
 
 ```bash

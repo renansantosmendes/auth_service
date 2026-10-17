@@ -515,3 +515,35 @@ def test_application_code_must_be_a_simple_identifier(
     """
     body = login_to_application(harness, "Fin Brain!")
     assert body["status_code"] == 422
+
+
+def test_forgot_password_logs_each_step_without_the_token(
+    harness: ApiHarness,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The recovery steps are logged, but the reset token never is.
+
+    Parameters
+    ----------
+    harness : ApiHarness
+        Test harness.
+    caplog : pytest.LogCaptureFixture
+        Captures the records written by the application.
+
+    Returns
+    -------
+    None
+    """
+    caplog.set_level("INFO")
+    harness.client.post(
+        f"{API}/auth/password/forgot",
+        json={"email": TEST_EMAIL},
+    )
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Step 1/5 result: account" in text for text in messages)
+    assert any("Step 2/5" in text for text in messages)
+    assert any("Step 5/5 done" in text for text in messages)
+    assert any("u***@example.com" in text for text in messages)
+    body = harness.email_sender.messages[0].body
+    token = body.split("#reset_token=", 1)[1].split()[0]
+    assert all(token not in text for text in messages)

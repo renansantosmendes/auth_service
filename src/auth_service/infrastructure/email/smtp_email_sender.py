@@ -1,5 +1,6 @@
 """E-mail sender that delivers messages through an SMTP server."""
 
+import logging
 import smtplib
 import ssl
 from email.message import EmailMessage as MimeMessage
@@ -9,6 +10,9 @@ from auth_service.application.ports.email import (
     EmailMessage,
     EmailSender,
 )
+from auth_service.infrastructure.logging_config import mask_email
+
+logger = logging.getLogger(__name__)
 
 
 class SmtpEmailSender(EmailSender):
@@ -81,6 +85,15 @@ class SmtpEmailSender(EmailSender):
         mime_message["To"] = message.recipient
         mime_message["Subject"] = message.subject
         mime_message.set_content(message.body)
+        logger.info(
+            "Connecting to SMTP server %s:%s (STARTTLS: %s, login: %s) to "
+            "send to %s.",
+            self._host,
+            self._port,
+            self._use_tls,
+            bool(self._username and self._password),
+            mask_email(message.recipient),
+        )
         try:
             with smtplib.SMTP(
                 self._host,
@@ -89,8 +102,19 @@ class SmtpEmailSender(EmailSender):
             ) as client:
                 if self._use_tls:
                     client.starttls(context=ssl.create_default_context())
+                    logger.info("SMTP STARTTLS negotiated.")
                 if self._username and self._password:
                     client.login(self._username, self._password)
+                    logger.info("SMTP login accepted.")
                 client.send_message(mime_message)
         except (smtplib.SMTPException, OSError) as error:
+            logger.error(
+                "SMTP delivery to %s failed: %s",
+                mask_email(message.recipient),
+                error,
+            )
             raise EmailDeliveryError(str(error)) from error
+        logger.info(
+            "SMTP server accepted the message to %s.",
+            mask_email(message.recipient),
+        )
