@@ -12,6 +12,47 @@ Interactive documentation, once the service is running:
 - ReDoc: `/redoc`
 - OpenAPI document: `/openapi.json`
 
+## Contents
+
+- [Overview](#overview)
+- [Endpoints](#endpoints)
+- [How client applications use it](#how-client-applications-use-it)
+- [Password recovery](#password-recovery)
+- [Security measures](#security-measures)
+- [Architecture](#architecture)
+- [Setup](#setup)
+- [Logs](#logs)
+- [Quality checks](#quality-checks)
+- [Deploy on Vercel](#deploy-on-vercel)
+
+## Overview
+
+```mermaid
+flowchart LR
+    users["Users"]
+    apps["Client applications<br/>(FinBrain frontend, CourseGen Studio, ...)"]
+    backends["Client back ends<br/>verify tokens locally"]
+
+    subgraph auth["auth_service (FastAPI on Vercel)"]
+        api["/api/v1/auth/*<br/>login, refresh, logout, me, password"]
+        jwks["/.well-known/jwks.json<br/>public keys"]
+    end
+
+    neon[("Neon PostgreSQL<br/>schema identity")]
+    mail["E-mail provider<br/>Resend or SMTP"]
+
+    users --> apps
+    apps -->|"sign in, refresh, logout"| api
+    apps -->|"Authorization: Bearer"| backends
+    backends -.->|"fetch public keys, cache them"| jwks
+    api --> neon
+    api -->|"recovery e-mail"| mail
+```
+
+Only this service holds the private signing key. Client applications receive
+access tokens and check them with the public keys, so they can trust the
+tokens without being able to create new ones.
+
 ## Endpoints
 
 | Method | Path | Auth | Purpose |
@@ -39,10 +80,55 @@ Interactive documentation, once the service is running:
 4. The client back end keeps its own profile data keyed by `sub`; it never
    reads the `identity` schema.
 
-Only this service holds the private key, so client applications can trust
-tokens but cannot forge them. A local check does not see sign-outs until
-the access token expires (15 minutes by default); when that matters, call
-`GET /api/v1/auth/me` with the token instead.
+```mermaid
+sequenceDiagram
+    participant F as Front end
+    participant A as auth_service
+    participant B as Client back end
+
+    F->>A: POST /api/v1/auth/login {email, password, application}
+    A-->>F: access_token (RS256) and refresh_token
+    F->>B: request with Authorization: Bearer access_token
+    B->>A: GET /.well-known/jwks.json (cached)
+    B->>B: verify signature, exp, iss, aud
+    alt token valid
+        B-->>F: data for sub
+    else invalid or expired
+        B-->>F: 401
+        F->>A: POST /api/v1/auth/refresh
+        A-->>F: new access_token and refresh_token
+    end
+```
+
+A local check does not see sign-outs until the access token expires (15
+minutes by default). When that matters, call `GET /api/v1/auth/me` with the
+token instead.
+
+## Password recovery
+
+The service has no public sign-up. Recovery is done through a single-use link
+sent by e-mail. The answer to `forgot` is the same whether or not the e-mail is
+registered.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Front end
+    participant A as auth_service
+    participant D as identity schema
+    participant M as E-mail provider
+
+    U->>F: "forgot my password" with e-mail
+    F->>A: POST /api/v1/auth/password/forgot
+    A->>D: find the account (step 1)
+    A->>D: store SHA-256 hash of a single-use token (steps 2 and 3)
+    A->>M: send the link built from PASSWORD_RESET_URL (steps 4 and 5)
+    A-->>F: neutral answer
+    U->>F: opens the link with the token
+    F->>A: POST /api/v1/auth/password/reset {token, new password}
+    A->>D: check the token hash, set the new password
+    A-->>F: 200
+```
 
 ## Security measures
 
@@ -64,7 +150,20 @@ the access token expires (15 minutes by default); when that matters, call
 
 Clean Architecture; dependencies point inwards only.
 
+```mermaid
+flowchart TB
+    presentation["presentation/api<br/>FastAPI app, routers, schemas,<br/>error handlers, composition root"]
+    application["application<br/>use cases, ports (interfaces),<br/>policies, DTOs"]
+    domain["domain<br/>entities, business errors,<br/>password policy (no I/O)"]
+    infrastructure["infrastructure<br/>PostgreSQL, Argon2, JWT (RS256),<br/>Resend, SMTP, settings"]
+    cli["cli<br/>administrative commands"]
+
+    presentation --> application --> domain
+    infrastructure -.->|"implements the ports"| application
+    cli --> application
 ```
+
+```text
 src/auth_service/
 ├── domain/           Entities, business errors, password policy (no I/O)
 ├── application/      Use cases, ports (interfaces), policies, DTOs
@@ -106,9 +205,9 @@ uv run --no-project python manage.py grant-access ana@example.com finbrain --rev
 ```
 
 A client that sends `"application": "finbrain"` in the sign-in body gets a
-token only when the account has active access to it; a revoked grant keeps
+token only when the account has active access to it. A revoked grant keeps
 its row, so the history stays in `identity.user_applications`. Clients that
-do not send `application` keep the previous behaviour.
+do not send `application` keep the previous behavior.
 
 ## Logs
 
@@ -149,3 +248,12 @@ every push to `main` and every pull request.
 3. Deploy. `vercel.json` routes every path to `api/index.py`.
 4. Point each client application at
    `https://<auth-service-host>/.well-known/jwks.json`.
+
+```mermaid
+flowchart LR
+    push["git push"] --> vercel["Vercel: zero-config build<br/>framework preset Other"]
+    env["Environment variables<br/>AUTH_DATABASE_URL, AUTH_JWT_PRIVATE_KEY,<br/>EMAIL_*, CORS_ALLOWED_ORIGINS"] --> vercel
+    vercel --> route["vercel.json: every path to api/index.py"]
+    route --> live["Live service"]
+    live --> clients["Client applications read<br/>/.well-known/jwks.json"]
+```
